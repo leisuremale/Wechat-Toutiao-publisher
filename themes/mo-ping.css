@@ -1,0 +1,81 @@
+/* wenyan custom theme - 墨评专用 */
+
+/* 容器：左右缩进 16px */
+#wenyan {
+    padding: 0 16px !important;
+    font-size: 15px !important;
+    line-height: 1.75 !important;
+    letter-spacing: 1.1px !important;
+    word-break: break-word !important;
+    text-align: left !important;
+    color: #333 !important;
+    caret-color: auto !important;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+
+/* 正文段落：左对齐，上下间距 16px */
+#wenyan p {
+    text-align: left !important;
+    margin: 16px 0 !important;
+    word-spacing: 0 !important;
+    font-size: 15px !important;
+    line-height: 1.75 !important;
+    text-indent: 0 !important;
+}
+
+/* 小标题 h2：17px */
+#wenyan h2 {
+    font-size: 17px !important;
+    font-weight: bold !important;
+    margin: 24px 0 16px 0 !important;
+    color: #2d3a4a !important;
+    background: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    display: block !important;
+    width: auto !important;
+}
+
+#wenyan h2 span {
+    color: #2d3a4a !important;
+    background: none !important;
+}
+
+/* 小标题 h3 */
+#wenyan h3 {
+    font-size: 16px !important;
+    font-weight: bold !important;
+    margin: 20px 0 12px 0 !important;
+    color: #3a4a5a !important;
+}
+
+/* 引用块 */
+#wenyan blockquote {
+    margin: 16px 0 !important;
+    padding: 8px 16px !important;
+    border-left: 3px solid #ccc !important;
+    color: #666 !important;
+    font-size: 14px !important;
+}
+
+/* 列表 */
+#wenyan ul, #wenyan ol {
+    margin: 12px 0 !important;
+    padding-left: 24px !important;
+}
+
+#wenyan li {
+    margin: 6px 0 !important;
+    font-size: 15px !important;
+}
+
+/* 强调 */
+#wenyan strong {
+    color: #1a1a1a !important;
+}
+
+/* 链接 */
+#wenyan a {
+    color: #576b95 !important;
+    text-decoration: none !important;
+}

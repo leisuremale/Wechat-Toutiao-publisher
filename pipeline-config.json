@@ -1,0 +1,21 @@
+{
+  "obsidian_vault": "/Users/lijingyan/Library/Mobile Documents/iCloud~md~obsidian/Documents/Le",
+  "queue_dir": "4-成品层/4-4 AI/4-4-1 AI写作（墨言）/待发文章",
+  "published_dir": "4-成品层/4-4 AI/4-4-1 AI写作（墨言）/已发布文章",
+  "toutiao_dir": "/Users/lijingyan/.openclaw/workspace-mo-ping/output/头条待发",
+  "wechat": {
+    "theme_css": "/Users/lijingyan/.openclaw/workspace-mo-ping/skills/Wechat-Toutiao-publisher/themes/mo-ping.css",
+    "author": "墨言"
+  },
+  "cover": {
+    "template": "literary",
+    "width": 900,
+    "height": 500
+  },
+  "templates": {
+    "literary": "暖米色 + 衬线字体，适合文学书评",
+    "dark": "深蓝底 + 红色点缀，适合深度思考",
+    "fresh": "浅绿 + 细线，适合清新随笔",
+    "bold": "纯白 + 橙色边框，适合观点鲜明"
+  }
+}
