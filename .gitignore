@@ -1,4 +1,23 @@
 __pycache__/
 *.pyc
+*.py[cod]
 .DS_Store
 /tmp/
+
+# Per-deploy runtime config (template: pipeline-config.example.json)
+pipeline-config.json
+
+# Resume sidecar state (lives in <queue_dir>/.state/)
+.state/
+
+# Toutiao Playwright profile — CONTAINS LOGIN COOKIES, never commit
+toutiao-profile/
+toutiao-shots/
+
+# Editor / OS
+*.bak
+*.swp
+*.swo
+
+# Logs
+*.log

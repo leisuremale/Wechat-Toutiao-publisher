@@ -1,0 +1,47 @@
+{
+  "obsidian_vault": "/Users/your-username/Library/Mobile Documents/iCloud~md~obsidian/Documents/YourVault",
+  "queue_dir": "AI写作/待发文章",
+  "published_dir": "AI写作/已发布文章",
+  "toutiao_dir": "/Users/your-username/output/头条待发",
+
+  "wechat": {
+    "theme_css": "themes/mo-ping.css",
+    "author": "墨言"
+  },
+
+  "cover": {
+    "template": "literary",
+    "width": 900,
+    "height": 500,
+    "subtitle": "墨 言 书 评",
+    "templates_dir": null
+  },
+
+  "wenyan_bin": null,
+
+  "toutiao": {
+    "auto": false,
+    "user_data_dir": null,
+    "headless": true,
+    "screenshot_dir": null,
+    "timeout_ms": 60000,
+    "selectors": {}
+  },
+
+  "retry": {
+    "wechat_attempts": 3,
+    "toutiao_attempts": 2,
+    "base_delay": 2.0,
+    "max_delay": 30.0
+  },
+
+  "notify": {
+    "webhook_url": null,
+    "osascript": false
+  },
+
+  "log": {
+    "dir": null,
+    "level": "INFO"
+  }
+}
