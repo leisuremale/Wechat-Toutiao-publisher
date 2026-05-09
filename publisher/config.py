@@ -51,6 +51,29 @@ class RetryConfig:
 
 
 @dataclass
+class BookCoverConfig:
+    enabled: bool = True
+    sources: list = field(default_factory=lambda: ["douban", "google_books"])
+    cache_dir: Optional[str] = None
+    timeout: int = 10
+
+
+@dataclass
+class QuoteCardsConfig:
+    enabled: bool = True
+    template: str = "classic"
+    templates_dir: Optional[str] = None
+    min_chars: int = 15
+    max_per_article: int = 4
+
+
+@dataclass
+class IllustrateConfig:
+    book_cover: BookCoverConfig = field(default_factory=BookCoverConfig)
+    quote_cards: QuoteCardsConfig = field(default_factory=QuoteCardsConfig)
+
+
+@dataclass
 class PipelineConfig:
     obsidian_vault: str
     queue_dir: str
@@ -63,6 +86,7 @@ class PipelineConfig:
     log: LogConfig = field(default_factory=LogConfig)
     toutiao: ToutiaoConfig = field(default_factory=ToutiaoConfig)
     retry: RetryConfig = field(default_factory=RetryConfig)
+    illustrate: IllustrateConfig = field(default_factory=IllustrateConfig)
 
     @property
     def queue_full(self) -> str:
@@ -107,5 +131,15 @@ def load_config(path: str) -> PipelineConfig:
         log=LogConfig(**raw["log"]) if raw.get("log") else LogConfig(),
         toutiao=ToutiaoConfig(**raw["toutiao"]) if raw.get("toutiao") else ToutiaoConfig(),
         retry=RetryConfig(**raw["retry"]) if raw.get("retry") else RetryConfig(),
+        illustrate=_load_illustrate(raw.get("illustrate", {})),
     )
     return cfg
+
+
+def _load_illustrate(raw: dict) -> IllustrateConfig:
+    bc = raw.get("book_cover")
+    qc = raw.get("quote_cards")
+    return IllustrateConfig(
+        book_cover=BookCoverConfig(**bc) if bc else BookCoverConfig(),
+        quote_cards=QuoteCardsConfig(**qc) if qc else QuoteCardsConfig(),
+    )

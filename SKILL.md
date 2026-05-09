@@ -3,7 +3,8 @@ name: Wechat-Toutiao-publisher
 description: |
   一键将 Obsidian Markdown 排版并发布到微信公众号草稿箱 + 头条号草稿。
   当用户要求「发到公众号」「推送草稿」「发布文章」「同步到头条」或类似意图时触发。
-  6 步全自动管道：取文章 → 封面 → 预处理 → 微信草稿 → 头条草稿 → 归档。
+  6 步全自动管道：取文章 → 封面 → 预处理 → 配图（书封+金句卡）→ 微信草稿 → 头条草稿 → 归档。
+  正文自动插入 Douban 抓的书封 + markdown 引用块渲染的金句卡片。
   支持 cron 定时；网络失败自动重试；已发文章绝不重复推送（sidecar 续跑）。
 ---
 
@@ -29,7 +30,7 @@ python -m publisher --config skills/Wechat-Toutiao-publisher/pipeline-config.jso
 脚本读取 `pipeline-config.json`，自动完成 6 步并输出一行 JSON：
 
 ```
-① find_article → ② generate_cover → ③ preprocess
+① find_article → ② generate_cover → ③ preprocess → ③b illustrate (book_cover + quote_cards)
 → ④ publish_wechat → ⑤ render_toutiao + publish_toutiao → ⑥ archive
 ```
 
@@ -45,6 +46,8 @@ python -m publisher --config skills/Wechat-Toutiao-publisher/pipeline-config.jso
   "toutiao_html": "/path/article.html",
   "toutiao_draft_url": "https://mp.toutiao.com/...",
   "toutiao_screenshot": "/path/toutiao_draft.png",
+  "book_cover": "/tmp/wap_book_covers/<sha>.jpg",
+  "quote_cards": ["/tmp/wap_quote_cards/quote_00.png", "..."],
   "resumed": false,
   "warnings": [],
   "error": null
@@ -57,6 +60,8 @@ python -m publisher --config skills/Wechat-Toutiao-publisher/pipeline-config.jso
 | `wechat_media_id` | 微信草稿箱 ID |
 | `toutiao_draft_url` | 头条草稿页 URL（仅 `toutiao.auto=true` 时有值） |
 | `toutiao_html` | 兜底 HTML（半自动模式下用户手动粘贴） |
+| `book_cover` | 顶部插入的书封图（Douban 抓的） |
+| `quote_cards[]` | 正文中插入的金句卡图路径列表 |
 | `resumed=true` | 本文之前部分步骤已完成，本次跳过；不是异常 |
 | `warnings[]` | 非致命降级（最常见：头条登录态过期、selector 失效） |
 | `error` | 非 null 即整体失败，按下表回报 |

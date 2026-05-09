@@ -43,5 +43,21 @@
   "log": {
     "dir": null,
     "level": "INFO"
+  },
+
+  "illustrate": {
+    "book_cover": {
+      "enabled": true,
+      "sources": ["douban", "google_books"],
+      "cache_dir": null,
+      "timeout": 10
+    },
+    "quote_cards": {
+      "enabled": true,
+      "template": "classic",
+      "templates_dir": null,
+      "min_chars": 15,
+      "max_per_article": 4
+    }
   }
 }

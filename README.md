@@ -62,6 +62,22 @@ python -m publisher
 ![](/absolute/path/img.jpg) # 标准 Markdown
 ```
 
+### 正文配图（书封 + 金句卡）
+
+文章不再只有封面，正文里也有视觉锚点：
+
+- **书封**：从 frontmatter `book:` 或标题 `《...》` 自动抽书名 → Douban / Google Books 抓封面 → 缓存 → 插到文章顶部。失败优雅降级
+- **金句卡**：扫 markdown 里的 `> 引用块`，每段渲染成 900x500 视觉卡片（Playwright + HTML/CSS 模板），插在引用之后保留可访问性。`max_per_article` 防止全是卡片劣化阅读节奏
+
+```json
+"illustrate": {
+  "book_cover": { "enabled": true, "sources": ["douban", "google_books"] },
+  "quote_cards": { "enabled": true, "template": "classic", "max_per_article": 4 }
+}
+```
+
+模板存在 `themes/quotes/*.json`（`classic` / `dark` / `minimal`），加新模板不改代码。
+
 ### Schema 校验 + 滚动日志 + 通知钩子
 
 - 启动期校验 `pipeline-config.json`，缺字段直接报清晰错误：
@@ -89,6 +105,7 @@ Wechat-Toutiao-publisher/
 │   ├── toutiao.py           # 头条 Playwright 自动化
 │   ├── retry.py             # 退避 + 致命错误黑名单
 │   ├── state.py             # 续跑 sidecar
+│   ├── illustrate.py        # 书封 + 金句卡（正文配图）
 │   ├── notify.py            # webhook + osascript
 │   └── log.py               # 滚动文件日志
 ├── scripts/
@@ -98,11 +115,15 @@ Wechat-Toutiao-publisher/
 │   └── wenyan-wrapper.sh    # Keychain 凭据注入
 └── themes/
     ├── mo-ping.css          # 排版主题
-    └── covers/              # 封面模板（JSON）
-        ├── literary.json
+    ├── covers/              # 封面模板（JSON）
+    │   ├── literary.json
+    │   ├── dark.json
+    │   ├── fresh.json
+    │   └── bold.json
+    └── quotes/              # 金句卡模板（JSON）
+        ├── classic.json
         ├── dark.json
-        ├── fresh.json
-        └── bold.json
+        └── minimal.json
 ```
 
 ## 快速开始
@@ -218,6 +239,22 @@ python3 scripts/publish-pipeline.py
   "log": {
     "dir": "/var/log/publisher",
     "level": "INFO"
+  },
+
+  "illustrate": {
+    "book_cover": {
+      "enabled": true,
+      "sources": ["douban", "google_books"],
+      "cache_dir": null,
+      "timeout": 10
+    },
+    "quote_cards": {
+      "enabled": true,
+      "template": "classic",
+      "templates_dir": null,
+      "min_chars": 15,
+      "max_per_article": 4
+    }
   }
 }
 ```
