@@ -62,6 +62,83 @@ python -m publisher
 ![](/absolute/path/img.jpg) # 标准 Markdown
 ```
 
+### 正文配图（书封 + 金句卡 + 主题摄影图）
+
+文章不再只有封面，正文里也有视觉锚点：
+
+- **书封**：从 frontmatter `book:` 或标题 `《...》` 自动抽书名 → 当当 / 豆瓣 / Google Books 抓封面 → 缓存 → 插到文章顶部
+- **手动覆盖**：frontmatter 加 `cover_url:` 即用指定图（URL / 绝对路径 / vault 相对路径），免去搜索失败
+- **金句卡**：扫 markdown 里的 `> 引用块`，每段渲染成 900x500 视觉卡片（Playwright + HTML/CSS 模板），插在引用之后保留可访问性
+- **主题摄影图**：Pexels（主）+ Wikimedia Commons（兜底）按关键词搜免费可商用图，按 H2 章节插 2-3 张，文末自动加图片来源声明
+
+```json
+"illustrate": {
+  "book_cover": { "enabled": true, "sources": ["dangdang", "douban", "google_books"] },
+  "quote_cards": { "enabled": true, "template": "classic", "max_per_article": 4 }
+}
+```
+
+豆瓣最近反爬严，**当当作为主源**更稳定。诊断哪个源能用：
+
+```bash
+python -m publisher --test-cover "百年孤独"
+# {"book": "百年孤独", "results": [
+#   {"source": "dangdang", "ok": true,  "url": "..."},
+#   {"source": "douban",   "ok": false, "url": null},
+#   ...
+# ]}
+```
+
+封面找不到时，frontmatter 写死 URL 兜底：
+
+```yaml
+---
+book: 百年孤独
+cover_url: https://img3m0.ddimg.cn/46/30/29819440-1_b_1762827510.jpg
+---
+```
+
+主题摄影图配置（默认关闭，需要 [Pexels](https://www.pexels.com/api/) 免费 API key）：
+
+```json
+"stock_images": {
+  "enabled": true,
+  "source": "pexels",
+  "fallback": "wikimedia",
+  "api_key": "你的 Pexels key",
+  "default_keywords": ["library", "books", "reading", "vintage", "candlelight"],
+  "count_per_article": 3,
+  "min_chars_per_image": 600,
+  "license_attribution": true
+}
+```
+
+> ⚠️ `api_key` 放在 `pipeline-config.json`（已 gitignored），**绝不要 commit**。
+
+`default_keywords` 里是兜底意境词；具体文章在 frontmatter 加 `image_keywords:` 优先生效：
+
+```yaml
+---
+book: 百年孤独
+image_keywords:
+  - latin america
+  - village
+  - magical realism
+---
+```
+
+诊断哪个源能用：
+
+```bash
+python -m publisher --test-stockimg "library"
+# {"keyword": "library", "results": [
+#   {"source": "pexels",    "ok": true,  "count": 3, "first": {...}},
+#   {"source": "wikimedia", "ok": true,  "count": 3, "first": {...}}
+# ]}
+```
+
+模板存在 `themes/quotes/*.json`（`classic` / `dark` / `minimal`），加新模板不改代码。
+
 ### Schema 校验 + 滚动日志 + 通知钩子
 
 - 启动期校验 `pipeline-config.json`，缺字段直接报清晰错误：
@@ -89,6 +166,7 @@ Wechat-Toutiao-publisher/
 │   ├── toutiao.py           # 头条 Playwright 自动化
 │   ├── retry.py             # 退避 + 致命错误黑名单
 │   ├── state.py             # 续跑 sidecar
+│   ├── illustrate.py        # 书封 + 金句卡（正文配图）
 │   ├── notify.py            # webhook + osascript
 │   └── log.py               # 滚动文件日志
 ├── scripts/
@@ -98,11 +176,15 @@ Wechat-Toutiao-publisher/
 │   └── wenyan-wrapper.sh    # Keychain 凭据注入
 └── themes/
     ├── mo-ping.css          # 排版主题
-    └── covers/              # 封面模板（JSON）
-        ├── literary.json
+    ├── covers/              # 封面模板（JSON）
+    │   ├── literary.json
+    │   ├── dark.json
+    │   ├── fresh.json
+    │   └── bold.json
+    └── quotes/              # 金句卡模板（JSON）
+        ├── classic.json
         ├── dark.json
-        ├── fresh.json
-        └── bold.json
+        └── minimal.json
 ```
 
 ## 快速开始
@@ -218,6 +300,32 @@ python3 scripts/publish-pipeline.py
   "log": {
     "dir": "/var/log/publisher",
     "level": "INFO"
+  },
+
+  "illustrate": {
+    "book_cover": {
+      "enabled": true,
+      "sources": ["dangdang", "douban", "google_books"],
+      "cache_dir": null,
+      "timeout": 10
+    },
+    "quote_cards": {
+      "enabled": true,
+      "template": "classic",
+      "templates_dir": null,
+      "min_chars": 15,
+      "max_per_article": 4
+    },
+    "stock_images": {
+      "enabled": false,
+      "source": "pexels",
+      "fallback": "wikimedia",
+      "api_key": null,
+      "default_keywords": ["library", "books", "reading", "vintage"],
+      "count_per_article": 3,
+      "min_chars_per_image": 600,
+      "license_attribution": true
+    }
   }
 }
 ```

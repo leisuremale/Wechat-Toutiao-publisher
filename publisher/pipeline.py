@@ -9,6 +9,7 @@ are non-fatal — they don't block archival.
 import os, shutil, tempfile, traceback
 
 from .cover import render as render_cover
+from .illustrate import illustrate as illustrate_content
 from .preprocess import preprocess_article
 from .retry import retry, is_likely_transient
 from . import state as state_mod
@@ -51,6 +52,7 @@ def run(cfg, logger):
         "article": None, "title": None,
         "wechat_media_id": None, "toutiao_html": None,
         "toutiao_draft_url": None, "toutiao_screenshot": None,
+        "book_cover": None, "quote_cards": [], "stock_images": [],
         "resumed": False,
         "warnings": [], "error": None,
     }
@@ -101,7 +103,7 @@ def run(cfg, logger):
 
         # Step 3: preprocess (idempotent on a fresh staged copy)
         result["step"] = "preprocess"
-        preprocess_article(
+        content = preprocess_article(
             md_path=staged,
             vault=cfg.obsidian_vault,
             title=title,
@@ -109,6 +111,30 @@ def run(cfg, logger):
             author=cfg.wechat.author,
             logger=logger,
         )
+
+        # Step 3b: illustrate — book cover (top) + quote cards (inline)
+        result["step"] = "illustrate"
+        ill = illustrate_content(
+            content=content,
+            title=title,
+            cfg=cfg,
+            tempdir=tempfile.gettempdir(),
+            vault=cfg.obsidian_vault,
+            logger=logger,
+        )
+        if ill["content"] != content:
+            with open(staged, "w", encoding="utf-8") as f:
+                f.write(ill["content"])
+        result["book_cover"] = ill["book_cover"]
+        result["quote_cards"] = ill["quote_cards"]
+        result["stock_images"] = ill.get("stock_images", [])
+        for w in ill["warnings"]:
+            result["warnings"].append(f"illustrate: {w}")
+        if ill["book_cover"] or ill["quote_cards"]:
+            logger.info(
+                f"illustrate: book_cover={'yes' if ill['book_cover'] else 'no'}, "
+                f"quote_cards={len(ill['quote_cards'])}"
+            )
 
         # Step 4: WeChat publish — skip if state says already done
         result["step"] = "publish_wechat"

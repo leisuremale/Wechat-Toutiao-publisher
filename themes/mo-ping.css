@@ -51,8 +51,8 @@
 
 /* 引用块 */
 #wenyan blockquote {
-    margin: 16px 0 !important;
-    padding: 8px 16px !important;
+    margin: 0 !important;
+    padding: 1px 16px !important;
     border-left: 3px solid #ccc !important;
     color: #666 !important;
     font-size: 14px !important;
@@ -78,4 +78,21 @@
 #wenyan a {
     color: #576b95 !important;
     text-decoration: none !important;
+}
+
+/* 分隔线：上下各留白 16px */
+#wenyan hr,
+#wenyan section[data-line] {
+    margin: 32px 0 !important;
+    border: none !important;
+    border-top: 1px solid #e0e0e0 !important;
+}
+
+/* 图片：上下间距同正文段落 16px，左右缩进由容器 padding 控制 */
+#wenyan img {
+    display: block !important;
+    margin: 16px 0 0 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
 }
