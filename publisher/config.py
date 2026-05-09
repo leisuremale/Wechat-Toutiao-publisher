@@ -68,9 +68,28 @@ class QuoteCardsConfig:
 
 
 @dataclass
+class StockImagesConfig:
+    enabled: bool = False
+    source: str = "pexels"
+    fallback: str = "wikimedia"
+    api_key: Optional[str] = None
+    default_keywords: list = field(default_factory=lambda: [
+        "library", "books", "reading", "vintage", "candlelight",
+        "writing", "manuscript", "old paper", "quiet", "bookshelf",
+        "literature", "ink", "fountain pen", "study room",
+    ])
+    count_per_article: int = 3
+    min_chars_per_image: int = 600
+    license_attribution: bool = True
+    cache_dir: Optional[str] = None
+    timeout: int = 15
+
+
+@dataclass
 class IllustrateConfig:
     book_cover: BookCoverConfig = field(default_factory=BookCoverConfig)
     quote_cards: QuoteCardsConfig = field(default_factory=QuoteCardsConfig)
+    stock_images: StockImagesConfig = field(default_factory=StockImagesConfig)
 
 
 @dataclass
@@ -139,7 +158,9 @@ def load_config(path: str) -> PipelineConfig:
 def _load_illustrate(raw: dict) -> IllustrateConfig:
     bc = raw.get("book_cover")
     qc = raw.get("quote_cards")
+    si = raw.get("stock_images")
     return IllustrateConfig(
         book_cover=BookCoverConfig(**bc) if bc else BookCoverConfig(),
         quote_cards=QuoteCardsConfig(**qc) if qc else QuoteCardsConfig(),
+        stock_images=StockImagesConfig(**si) if si else StockImagesConfig(),
     )

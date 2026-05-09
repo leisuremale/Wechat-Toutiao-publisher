@@ -52,7 +52,7 @@ def run(cfg, logger):
         "article": None, "title": None,
         "wechat_media_id": None, "toutiao_html": None,
         "toutiao_draft_url": None, "toutiao_screenshot": None,
-        "book_cover": None, "quote_cards": [],
+        "book_cover": None, "quote_cards": [], "stock_images": [],
         "resumed": False,
         "warnings": [], "error": None,
     }
@@ -127,6 +127,7 @@ def run(cfg, logger):
                 f.write(ill["content"])
         result["book_cover"] = ill["book_cover"]
         result["quote_cards"] = ill["quote_cards"]
+        result["stock_images"] = ill.get("stock_images", [])
         for w in ill["warnings"]:
             result["warnings"].append(f"illustrate: {w}")
         if ill["book_cover"] or ill["quote_cards"]:

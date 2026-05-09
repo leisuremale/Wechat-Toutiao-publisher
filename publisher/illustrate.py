@@ -402,7 +402,7 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
     """
     result = {
         "content": content, "book_cover": None,
-        "quote_cards": [], "warnings": [],
+        "quote_cards": [], "stock_images": [], "warnings": [],
     }
     ill_cfg = cfg.illustrate
 
@@ -439,6 +439,23 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
         else:
             target = meta["cover_url"] or meta["name"]
             result["warnings"].append(f"book_cover: not found for {target!r}")
+
+    # Stock images (theme-matched photos at H2 anchors)
+    if ill_cfg.stock_images.enabled:
+        from . import stockimg  # lazy: keep illustrate self-contained for tests
+        cache_dir = (ill_cfg.stock_images.cache_dir
+                     or os.path.join(tempdir, "wap_stock_images"))
+        si_result = stockimg.add_stock_images(
+            result["content"], ill_cfg.stock_images, cache_dir, logger=logger,
+        )
+        result["content"] = si_result["content"]
+        result["stock_images"] = si_result["images"]
+        for w in si_result["warnings"]:
+            result["warnings"].append(f"stock_images: {w}")
+        if logger and si_result["images"]:
+            logger.info(f"stock_images: inserted {len(si_result['images'])}")
+    else:
+        result["stock_images"] = []
 
     # Quote cards
     if ill_cfg.quote_cards.enabled:

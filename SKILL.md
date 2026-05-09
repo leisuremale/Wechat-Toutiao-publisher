@@ -4,7 +4,7 @@ description: |
   一键将 Obsidian Markdown 排版并发布到微信公众号草稿箱 + 头条号草稿。
   当用户要求「发到公众号」「推送草稿」「发布文章」「同步到头条」或类似意图时触发。
   6 步全自动管道：取文章 → 封面 → 预处理 → 配图（书封+金句卡）→ 微信草稿 → 头条草稿 → 归档。
-  正文自动插入书封（当当/豆瓣/Google Books 三级 fallback）+ markdown 引用块渲染的金句卡片。
+  正文自动插入书封（当当/豆瓣/Google Books 三级 fallback）+ markdown 引用块渲染的金句卡片 + 主题摄影图（Pexels/Wikimedia）。
   支持 cron 定时；网络失败自动重试；已发文章绝不重复推送（sidecar 续跑）。
 ---
 
@@ -48,6 +48,7 @@ python -m publisher --config skills/Wechat-Toutiao-publisher/pipeline-config.jso
   "toutiao_screenshot": "/path/toutiao_draft.png",
   "book_cover": "/tmp/wap_book_covers/<sha>.jpg",
   "quote_cards": ["/tmp/wap_quote_cards/quote_00.png", "..."],
+  "stock_images": ["/tmp/wap_stock_images/<sha>.jpg", "..."],
   "resumed": false,
   "warnings": [],
   "error": null
@@ -60,8 +61,9 @@ python -m publisher --config skills/Wechat-Toutiao-publisher/pipeline-config.jso
 | `wechat_media_id` | 微信草稿箱 ID |
 | `toutiao_draft_url` | 头条草稿页 URL（仅 `toutiao.auto=true` 时有值） |
 | `toutiao_html` | 兜底 HTML（半自动模式下用户手动粘贴） |
-| `book_cover` | 顶部插入的书封图（Douban 抓的） |
+| `book_cover` | 顶部插入的书封图（当当/豆瓣抓的，或 frontmatter cover_url 指定的） |
 | `quote_cards[]` | 正文中插入的金句卡图路径列表 |
+| `stock_images[]` | 主题摄影图列表（Pexels/Wikimedia 抓的，按 H2 分布） |
 | `resumed=true` | 本文之前部分步骤已完成，本次跳过；不是异常 |
 | `warnings[]` | 非致命降级（最常见：头条登录态过期、selector 失效） |
 | `error` | 非 null 即整体失败，按下表回报 |
@@ -151,3 +153,22 @@ python -m publisher --test-cover "书名"   # 试每个源，输出哪个能用
 ```
 
 仅当用户问「为什么这本书的封面没出来」或 `warnings` 含 `book_cover: not found` 时建议用户手动跑。诊断后用户可以根据结果改 `pipeline-config.json` 的 `illustrate.book_cover.sources` 顺序，或在 frontmatter 加 `cover_url:` 手动覆盖。
+
+## 主题摄影图诊断（管理操作）
+
+```bash
+python -m publisher --test-stockimg "keyword"   # 试 Pexels + Wikimedia 是否能搜到
+```
+
+仅当用户问「为什么文章里没图」或 `warnings` 含 `stock_images:` 时建议手动跑。
+
+主题图设置在 `pipeline-config.json.illustrate.stock_images`：默认关闭；启用需要 Pexels 免费 API key。具体某篇文章想精准控关键词，frontmatter 加：
+
+```yaml
+image_keywords:
+  - latin america
+  - village
+  - magical realism
+```
+
+否则用 `default_keywords` 池随机抽。

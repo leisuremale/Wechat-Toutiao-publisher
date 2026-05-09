@@ -58,6 +58,21 @@
       "templates_dir": null,
       "min_chars": 15,
       "max_per_article": 4
+    },
+    "stock_images": {
+      "enabled": false,
+      "source": "pexels",
+      "fallback": "wikimedia",
+      "api_key": null,
+      "default_keywords": [
+        "library", "books", "reading", "vintage", "candlelight",
+        "writing", "manuscript", "old paper", "quiet", "bookshelf"
+      ],
+      "count_per_article": 3,
+      "min_chars_per_image": 600,
+      "license_attribution": true,
+      "cache_dir": null,
+      "timeout": 15
     }
   }
 }
