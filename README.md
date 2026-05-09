@@ -8,36 +8,53 @@
 
 ## 亮点
 
-### 🤖 一条命令，全自动管道
+### 一条命令完成 6 步
 
-传统的 AI Agent 发布流程：模型要理解 7 步自然语言指令，逐步执行，容易跳步或出错。
-
-本 Skill 的做法：**一个 Python 脚本完成全部 6 步**，输出结构化 JSON。模型只需调一条命令、解析一个 JSON、播报结果。
-
-```
-python3 scripts/publish-pipeline.py
-# → {"success": true, "wechat_media_id": "...", "toutiao_html": "..."}
+```bash
+python -m publisher
+# → {"success": true, "wechat_media_id": "...", "toutiao_draft_url": "...", ...}
 ```
 
 ```
 ① 取文章 → ② 生成封面 → ③ 预处理（图片+frontmatter）
-→ ④ 微信发布 → ⑤ 头条渲染 → ⑥ 归档
+→ ④ 微信发布 → ⑤ 头条渲染 + 自动建草稿 → ⑥ 归档
 ```
 
-### 🎨 4 套 HTML/CSS 封面模板
+### 双平台全自动
 
-不是简陋的 PIL 纯色大字，而是 **Playwright + Chromium 渲染的 HTML/CSS 封面**。专业设计感，900×500 高清输出。
-
-| 模板 | 效果 | 适合 |
+| 平台 | 模式 | 实现 |
 |------|------|------|
-| `literary` | 暖米色底 + 衬线字体 + 装饰线 | 文学书评 |
-| `dark` | 深蓝底 + 红色点缀 + 无衬线 | 深度思考 |
-| `fresh` | 浅绿底 + 细线 + 留白 | 清新随笔 |
-| `bold` | 纯白底 + 橙色边框 | 观点鲜明 |
+| 微信公众号 | wenyan publish → 草稿箱 | 全自动（API） |
+| 头条号 | Playwright 模拟登录 → 建草稿 | 全自动（首次扫码后免登录） |
+| 头条号（兜底） | wenyan render → HTML 文件 | 半自动粘贴 |
 
-### 📝 Obsidian 原生工作流
+> 全自动只**保存草稿**，最终发布保留人工审核（避免风控、避免错发）。
 
-在 Obsidian 里写 `![[图片名.png]]` 嵌入图片，发布时自动转换为微信兼容格式并上传到微信 CDN。不需要手动处理图片路径。
+### 重试 + 续跑
+
+- 微信发布默认 3 次指数退避；遇到 `40001 invalid credential` 等致命错误立即放弃
+- Toutiao 自动发布只在 `save_draft` **之前**的步骤可重试，之后绝不重试以避免重复草稿
+- 已成功发到微信的文章会写 sidecar JSON 到 `<queue_dir>/.state/`；下次 cron 直接跳过 step 4，绝不会向草稿箱重复推送同一文章
+
+### 4 套 HTML/CSS 封面模板，JSON 配置
+
+模板存在 `themes/covers/*.json`，加新模板不改代码：
+
+```json
+// themes/covers/literary.json
+{ "name": "文学", "bg": "#f5f0e8", "accent": "#8b4513", "decor": "top", ... }
+```
+
+| 模板 | 风格 | 适合 |
+|------|------|------|
+| `literary` | 暖米色 + 衬线字体 + 装饰线 | 文学书评 |
+| `dark` | 深蓝 + 红色点缀 + 无衬线 | 深度思考 |
+| `fresh` | 浅绿 + 细线 + 留白 | 清新随笔 |
+| `bold` | 纯白 + 橙色边框 | 观点鲜明 |
+
+### Obsidian 原生工作流
+
+`![[图片名.png]]` 自动转换 + 上传到微信 CDN，不需要手动处理路径。Vault 索引一次构建，多图查询 O(1)。
 
 ```markdown
 ![[村上春树.jpg]]           # vault 内自动搜索
@@ -45,97 +62,255 @@ python3 scripts/publish-pipeline.py
 ![](/absolute/path/img.jpg) # 标准 Markdown
 ```
 
-### ⚙️ JSON 配置，修改零代码
+### Schema 校验 + 滚动日志 + 通知钩子
 
-所有设置集中在 `pipeline-config.json`：
+- 启动期校验 `pipeline-config.json`，缺字段直接报清晰错误：
+  ```
+  ValueError: config: missing required 'wechat.author'
+  ```
+- 配置 `log.dir` → 按天切分日志，保留 14 天
+- 配置 `notify.webhook_url` / `notify.osascript` → 失败推手机
 
-```json
-{
-  "cover": { "template": "literary" },
-  "wechat": { "theme_css": "themes/mo-ping.css", "author": "墨言" },
-  "queue_dir": ".../待发文章",
-  "published_dir": ".../已发布文章"
-}
+## 架构
+
 ```
-
-改封面模板？改 `"template": "dark"` 就行。换排版主题？改 `"theme_css"` 路径。cron 下次自动生效。
-
-### 📊 双平台覆盖
-
-| 平台 | 方式 | 自动化 |
-|------|------|--------|
-| 微信公众号 | wenyan publish → 草稿箱 | ✅ 全自动 |
-| 头条号 | wenyan render → HTML 文件 | ⚠️ 半自动（30 秒粘贴） |
-
-> 头条号没有开放 API，无法全自动发布。但生成的 HTML 完全兼容头条编辑器，打开复制粘贴即可。
-
-### 🕐 Cron 定时发布
-
-每天 10:30 自动从 Obsidian 待发文章目录取第一篇，发布到微信草稿箱 + 渲染头条 HTML + 归档。
-
-```bash
-openclaw cron add --agent mo-ping --name "wechat-publish" \
-  --cron "30 10 * * *" --tz Asia/Shanghai \
-  --message "python3 .../publish-pipeline.py | 解析 JSON | 播报"
+Wechat-Toutiao-publisher/
+├── pipeline-config.json     # 所有配置
+├── SKILL.md                 # AI Agent 触发规则（openclaw）
+├── README.md                # 本文件
+├── SETUP-OPENCLAW.md        # 部署到一台新 Mac
+├── publisher/               # Python 包（核心）
+│   ├── __main__.py          # `python -m publisher` 入口
+│   ├── config.py            # dataclass schema + 启动期验证
+│   ├── pipeline.py          # 6 步编排 + retry + resume
+│   ├── cover.py             # 封面渲染（playwright 懒加载）
+│   ├── preprocess.py        # Obsidian ![[..]] + frontmatter
+│   ├── wenyan.py            # wenyan CLI 薄封装
+│   ├── toutiao.py           # 头条 Playwright 自动化
+│   ├── retry.py             # 退避 + 致命错误黑名单
+│   ├── state.py             # 续跑 sidecar
+│   ├── notify.py            # webhook + osascript
+│   └── log.py               # 滚动文件日志
+├── scripts/
+│   ├── publish-pipeline.py  # 转发到 publisher（cron 兼容）
+│   ├── generate-cover.py    # 同上
+│   ├── preprocess-article.py
+│   └── wenyan-wrapper.sh    # Keychain 凭据注入
+└── themes/
+    ├── mo-ping.css          # 排版主题
+    └── covers/              # 封面模板（JSON）
+        ├── literary.json
+        ├── dark.json
+        ├── fresh.json
+        └── bold.json
 ```
 
 ## 快速开始
 
+> 部署到一台新 Mac 走这里：[SETUP-OPENCLAW.md](./SETUP-OPENCLAW.md)。
+
 ### 依赖
 
 ```bash
-npm install -g @wenyan-md/cli      # wenyan 排版引擎
-pip3 install playwright             # 封面渲染
+npm install -g @wenyan-md/cli
+pip3 install playwright
 python3 -m playwright install chromium
 ```
 
-### 配置凭据
-
-微信 AppID/Secret 存入 macOS Keychain（或设置环境变量 `WECHAT_APP_ID` / `WECHAT_APP_SECRET`）：
+### 凭据 + wrapper
 
 ```bash
-security add-generic-password -s "md2wechat-appid" -a "md2wechat" -w "wx..."
+security add-generic-password -s "md2wechat-appid"  -a "md2wechat" -w "wx..."
 security add-generic-password -s "md2wechat-secret" -a "md2wechat" -w "..."
+ln -sf "$(pwd)/scripts/wenyan-wrapper.sh" ~/.local/bin/wenyan
 ```
 
-Wrapper 脚本 `~/.local/bin/wenyan` 自动从 Keychain 注入凭据。
-
-### 发布
+### 配置文件
 
 ```bash
-# 自动管道（从队列取第一篇）
+cp pipeline-config.example.json pipeline-config.json
+$EDITOR pipeline-config.json     # 改成本机路径
+```
+
+`pipeline-config.json` 已在 `.gitignore` 中，不会被误提交。example 文件展示所有可选字段（`null` 即「使用默认」）。最小可用：
+
+```json
+{
+  "obsidian_vault": "/Users/you/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault",
+  "queue_dir": "AI写作/待发文章",
+  "published_dir": "AI写作/已发布文章",
+  "toutiao_dir": "/Users/you/output/头条待发",
+  "wechat": { "theme_css": "themes/mo-ping.css", "author": "墨言" },
+  "cover": { "template": "literary" }
+}
+```
+
+### 运行
+
+```bash
+python -m publisher                           # 主入口
+python -m publisher --config /path/to.json    # 指定配置
+python -m publisher --login-toutiao           # 头条首次扫码（headed）
+python -m publisher --check-toutiao           # 检查头条登录态
+
+# 兼容旧调用（cron 任务无需改动）
 python3 scripts/publish-pipeline.py
-
-# 手动单篇
-~/.local/bin/wenyan publish -f article.md -c themes/mo-ping.css
 ```
 
-### 封面生成
+## 配置参考
+
+### 必填
+
+```json
+{
+  "obsidian_vault": "...",
+  "queue_dir": "...",
+  "published_dir": "...",
+  "toutiao_dir": "...",
+  "wechat": { "theme_css": "...", "author": "..." },
+  "cover": { "template": "literary" }
+}
+```
+
+启动期 schema 缺字段会立即抛 `ValueError: config: missing required '<path>'`。
+
+### 可选
+
+```json
+{
+  "wenyan_bin": "/custom/path/to/wenyan",
+
+  "cover": {
+    "template": "literary",
+    "width": 900,
+    "height": 500,
+    "templates_dir": "/extra/covers",
+    "subtitle": "墨 言 书 评"
+  },
+
+  "toutiao": {
+    "auto": false,
+    "user_data_dir": "/Users/you/.openclaw/toutiao-profile",
+    "headless": true,
+    "screenshot_dir": "/Users/you/.openclaw/toutiao-shots",
+    "timeout_ms": 60000,
+    "selectors": {
+      "title": "input[placeholder*='标题']",
+      "editor": "div[contenteditable='true']",
+      "cover_button": "text=封面",
+      "cover_input": "input[type='file']",
+      "save_draft": "text=存草稿"
+    }
+  },
+
+  "retry": {
+    "wechat_attempts": 3,
+    "toutiao_attempts": 2,
+    "base_delay": 2.0,
+    "max_delay": 30.0
+  },
+
+  "notify": {
+    "webhook_url": "https://api.day.app/<key>/...",
+    "osascript": true
+  },
+
+  "log": {
+    "dir": "/var/log/publisher",
+    "level": "INFO"
+  }
+}
+```
+
+## 头条全自动 vs 半自动
+
+### 半自动（默认，零配置）
+
+不配 `toutiao.auto`，pipeline 把 wenyan 渲染好的 HTML 写到 `toutiao_dir/<title>.html`。打开 https://mp.toutiao.com → 文章 → 新建 → 复制粘贴。
+
+### 全自动
+
+```json
+{ "toutiao": { "auto": true, "user_data_dir": "/Users/you/.openclaw/toutiao-profile" } }
+```
+
+> `user_data_dir` 包含登录 cookie，**严禁入库**。建议放仓库外、`chmod 700`。
+
+首次扫码（需要图形终端）：
 
 ```bash
-python3 scripts/generate-cover.py "文章标题" -t literary -o cover.png
+python -m publisher --login-toutiao
 ```
 
-## 目录结构
+健康检查（cron 跑前可用，过期 exit 1）：
 
+```bash
+python -m publisher --check-toutiao
+# {"logged_in": true}
 ```
-Wechat-Toutiao-publisher/
-├── pipeline-config.json        # 所有配置
-├── SKILL.md                    # AI Agent 触发规则
-├── README.md                   # 本文件
-├── scripts/
-│   ├── publish-pipeline.py     # ★ 一键管道（6 步合一）
-│   ├── generate-cover.py       # HTML/CSS 封面生成
-│   └── preprocess-article.py   # Obsidian 图片转换 + frontmatter
-└── themes/
-    └── mo-ping.css             # 墨评自定义排版主题
+
+DOM 选择器配置在 `toutiao.selectors`，mp.toutiao.com 改版时修配置而不是改代码。
+
+## 失败恢复
+
+### Sidecar 续跑
+
+成功的步骤会写 `<queue_dir>/.state/<article>.json`：
+
+```json
+{
+  "version": 1,
+  "wechat_published": true,
+  "wechat_media_id": "abc123",
+  "toutiao_drafted": true,
+  "toutiao_draft_url": "https://mp.toutiao.com/...",
+  "updated_at": "2026-05-09T10:30:00+00:00"
+}
 ```
+
+下次 cron 看到 sidecar 会**跳过已完成的步骤**。归档成功后 sidecar 自动删除。
+
+手动重跑同一篇：删除对应的 `.state/<article>.json` 即可。
+
+### 重试策略
+
+| 步骤 | 重试 | 致命模式（不重试） |
+|------|------|-------------------|
+| cover / preprocess / toutiao render | 否 | — |
+| WeChat publish | 默认 3 次（2s → 4s 退避） | `40001 invalid credential`、`40013 invalid appid` |
+| Toutiao auto-publish | 默认 2 次 | `not logged in`、`selector not found`；**`save_draft` 之后绝不重试** |
+
+## Cron 定时
+
+```bash
+openclaw cron add --agent mo-ping --name "wechat-publish" \
+  --cron "30 10 * * *" --tz Asia/Shanghai \
+  --message "cd /path/to/Wechat-Toutiao-publisher && python -m publisher"
+```
+
+## 故障排查
+
+| 现象 | 处理 |
+|------|------|
+| `config: missing required '<key>'` | schema 校验报错，按提示补字段 |
+| `40164: invalid ip` | `curl -s4 ifconfig.me` → 加微信公众号 IP 白名单。retry 会自动重试 3 次 |
+| `40001: invalid credential` | 删 `~/.config/wenyan-md/token.json`；致命模式，不会重试 |
+| 头条 `not logged in` | `python -m publisher --login-toutiao` 重新扫码 |
+| 头条 `selector not found` | mp.toutiao.com DOM 改了。inspect 当前页面，自定义 selector 写到 `toutiao.selectors` |
+| 队列为空 | `{"success": true, "message": "HEARTBEAT_OK: queue empty"}`，正常 |
+| cron 重跑同一文章 | 不会重发到微信（sidecar 跳过 step 4）；头条会重试 |
+| 想强制重发 | 删除 `<queue_dir>/.state/<article>.json` |
+| Playwright 启动慢 | 一天一次发布忽略；每次 ~2-3s 冷启 chromium |
 
 ## 依赖项目
 
-- [wenyan（文颜）](https://github.com/caol64/wenyan) — 多平台 Markdown 排版发布工具
-- [Playwright](https://playwright.dev) — 封面 HTML/CSS 渲染
+- [wenyan（文颜）](https://github.com/caol64/wenyan) — 多平台 Markdown 排版发布
+- [Playwright](https://playwright.dev) — 封面渲染 + 头条自动化
 - macOS Keychain — 凭据管理
+
+## 部署
+
+部署到一台新 Mac？看 [SETUP-OPENCLAW.md](./SETUP-OPENCLAW.md)。
 
 ## License
 
