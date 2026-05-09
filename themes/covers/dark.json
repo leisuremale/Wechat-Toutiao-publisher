@@ -1,0 +1,9 @@
+{
+  "name": "深夜",
+  "bg": "#1a1a2e",
+  "accent": "#e94560",
+  "text": "#eee",
+  "sub": "#999",
+  "font": "'PingFang SC', 'Microsoft YaHei', sans-serif",
+  "decor": "left"
+}
