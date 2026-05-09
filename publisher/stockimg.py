@@ -262,6 +262,7 @@ def insert_images(content: str, image_paths: list, anchors: list) -> str:
     for line_idx, path in pairs:
         lines.insert(line_idx + 1, "")
         lines.insert(line_idx + 2, f"![]({path})")
+        lines.insert(line_idx + 3, "")
     return "\n".join(lines)
 
 
@@ -377,3 +378,4 @@ def add_stock_images(content: str, cfg, cache_dir: str, logger=None) -> dict:
     result["content"] = new_content
     result["images"] = image_paths
     return result
+

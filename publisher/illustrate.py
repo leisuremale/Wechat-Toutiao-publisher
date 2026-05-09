@@ -125,6 +125,94 @@ FRONTMATTER_BLOCK_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 BOOK_FIELD_RE = re.compile(r"(?m)^book:\s*(.+)$")
 BOOK_NAME_RE = re.compile(r"《([^》]+)》")
 
+# ── Chinese quote → blockquote normalisation ───────────────────
+_CHINESE_QUOTE_LINE = re.compile(r'^(\s*)(["“])(.*?)(["”])(\s*)$')
+_LEADING_QUOTE = re.compile(r'^(\s*)(["“])(.*)')
+_TRAILING_QUOTE = re.compile(r'(.*?)(["”])(\s*)$')
+
+
+def normalize_quotes(content: str) -> str:
+    """Convert short Chinese-quoted passages into markdown blockquotes.
+
+    Only ≤4 lines, no paragraph breaks.  Longer spans are editorial
+    narration and left untouched.
+    """
+    MAX_QUOTE_LINES = 4
+    lines = content.split("\n")
+    out: list = []
+    in_quote = False
+    quote_buf: list = []
+    in_fence = False
+
+    def _flush_quote(convert: bool):
+        nonlocal quote_buf
+        if not quote_buf:
+            return
+        if not convert or len(quote_buf) > MAX_QUOTE_LINES:
+            out.extend(quote_buf)
+        else:
+            first = quote_buf[0]
+            last = quote_buf[-1]
+            fm = _LEADING_QUOTE.match(first)
+            if fm:
+                first = fm.group(1) + fm.group(3)
+            else:
+                first = first.lstrip("“\"")
+            quote_buf[0] = first
+            lm = _TRAILING_QUOTE.match(last)
+            if lm:
+                last = lm.group(1) + lm.group(3)
+            else:
+                last = last.rstrip("”\"")
+            quote_buf[-1] = last
+            out.append("\n".join(f"> {l}" for l in quote_buf))
+        quote_buf = []
+
+    for line in lines:
+        if FENCE_RE.match(line):
+            _flush_quote(convert=False)
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        if QUOTE_LINE_RE.match(line):
+            out.append(line)
+            continue
+
+        sm = _CHINESE_QUOTE_LINE.match(line)
+        if sm:
+            inner = sm.group(3).strip()
+            if inner:
+                out.append(f"> {inner}")
+                continue
+
+        has_open = bool(_LEADING_QUOTE.match(line))
+        has_close = bool(_TRAILING_QUOTE.match(line))
+
+        if in_quote and line.strip() == "":
+            _flush_quote(convert=False)
+            in_quote = False
+            out.append(line)
+            continue
+
+        if has_open and not has_close:
+            in_quote = True
+            quote_buf.append(line)
+        elif has_close and in_quote:
+            quote_buf.append(line)
+            valid = len(quote_buf) <= MAX_QUOTE_LINES
+            _flush_quote(convert=valid)
+            in_quote = False
+        elif in_quote:
+            quote_buf.append(line)
+        else:
+            out.append(line)
+
+    _flush_quote(convert=False)
+    return "\n".join(out)
+
 
 def find_blockquotes(content: str) -> list:
     """Return [{'start_line', 'end_line', 'text'}] for non-code blockquotes."""
@@ -443,10 +531,27 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
     # Stock images (theme-matched photos at H2 anchors)
     if ill_cfg.stock_images.enabled:
         from . import stockimg  # lazy: keep illustrate self-contained for tests
+
+        # Resolve Pexels API key: config > macOS Keychain
+        import copy
+        si_cfg = copy.copy(ill_cfg.stock_images)
+        if not si_cfg.api_key and si_cfg.source == "pexels":
+            import subprocess
+            try:
+                out = subprocess.run(
+                    ["security", "find-generic-password",
+                     "-s", "pexels-api-key", "-a", "md2wechat", "-w"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if out.returncode == 0 and out.stdout.strip():
+                    si_cfg.api_key = out.stdout.strip()
+            except Exception:
+                pass
+
         cache_dir = (ill_cfg.stock_images.cache_dir
                      or os.path.join(tempdir, "wap_stock_images"))
         si_result = stockimg.add_stock_images(
-            result["content"], ill_cfg.stock_images, cache_dir, logger=logger,
+            result["content"], si_cfg, cache_dir, logger=logger,
         )
         result["content"] = si_result["content"]
         result["stock_images"] = si_result["images"]
@@ -456,6 +561,9 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
             logger.info(f"stock_images: inserted {len(si_result['images'])}")
     else:
         result["stock_images"] = []
+
+    # Normalize Chinese quotes → blockquotes before extraction
+    result["content"] = normalize_quotes(result["content"])
 
     # Quote cards
     if ill_cfg.quote_cards.enabled:
@@ -486,3 +594,4 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
             result["warnings"].append("quote_cards: no eligible blockquotes")
 
     return result
+
