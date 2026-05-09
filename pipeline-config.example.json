@@ -48,7 +48,7 @@
   "illustrate": {
     "book_cover": {
       "enabled": true,
-      "sources": ["douban", "google_books"],
+      "sources": ["dangdang", "douban", "google_books"],
       "cache_dir": null,
       "timeout": 10
     },

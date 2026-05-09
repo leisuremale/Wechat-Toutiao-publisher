@@ -197,43 +197,83 @@ def insert_quote_cards(content: str, render_fn, max_count: int,
 
 
 # ── Book cover fetching ──────────────────────────────────────
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+COVER_URL_FIELD_RE = re.compile(r"(?m)^cover_url:\s*(.+)$")
+
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
 
 
-def extract_book_name(title: str, content: str) -> Optional[str]:
-    """Try frontmatter `book:` first, then 《...》 in title or first H1."""
+def extract_book_meta(title: str, content: str) -> dict:
+    """Returns {'name', 'cover_url'} from frontmatter / title / first H1."""
+    meta = {"name": None, "cover_url": None}
     m = FRONTMATTER_BLOCK_RE.match(content)
     body = content
     if m:
-        bm = BOOK_FIELD_RE.search(m.group(1))
+        fm = m.group(1)
+        bm = BOOK_FIELD_RE.search(fm)
         if bm:
-            return bm.group(1).strip().strip("\"'")
+            meta["name"] = bm.group(1).strip().strip("\"'")
+        cm = COVER_URL_FIELD_RE.search(fm)
+        if cm:
+            meta["cover_url"] = cm.group(1).strip().strip("\"'")
         body = content[m.end():]
 
-    tm = BOOK_NAME_RE.search(title or "")
-    if tm:
-        return tm.group(1).strip()
+    if not meta["name"]:
+        tm = BOOK_NAME_RE.search(title or "")
+        if tm:
+            meta["name"] = tm.group(1).strip()
+    if not meta["name"]:
+        for line in body.split("\n"):
+            s = line.strip()
+            if s.startswith("# "):
+                hm = BOOK_NAME_RE.search(s)
+                if hm:
+                    meta["name"] = hm.group(1).strip()
+                break
+    return meta
 
-    for line in body.split("\n"):
-        s = line.strip()
-        if s.startswith("# "):
-            hm = BOOK_NAME_RE.search(s)
-            if hm:
-                return hm.group(1).strip()
-            break
-    return None
+
+def extract_book_name(title: str, content: str) -> Optional[str]:
+    """Backward-compat wrapper. Returns just the name field."""
+    return extract_book_meta(title, content)["name"]
 
 
 def _http_get(url: str, timeout: int = 10) -> Optional[bytes]:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        req = urllib.request.Request(url, headers=DEFAULT_HEADERS)
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.read()
     except Exception:
         return None
+
+
+def _try_dangdang(name: str, timeout: int = 10) -> Optional[str]:
+    """Search dangdang.com book listings. Pattern observed 2026-05.
+
+    Cover URLs follow `//img{N}m{N}.ddimg.cn/<dir>/<dir>/<id>-<n>_b_<ts>.jpg`.
+    The `_b_` size token reliably distinguishes product covers from QR codes
+    and promotional banners (which use /doc/ paths).
+    """
+    q = urllib.parse.quote(name)
+    url = f"http://search.dangdang.com/?key={q}&act=input"
+    data = _http_get(url, timeout)
+    if not data:
+        return None
+    html = data.decode("utf-8", errors="ignore")
+    m = re.search(
+        r"//img\d?m?\d*\.ddimg\.cn/\d+/\d+/[^\"'\s]+_(?:b|d|m)_[^\"'\s]+\.(?:jpg|jpeg|webp)",
+        html,
+    )
+    if not m:
+        return None
+    cover = m.group(0)
+    return "http:" + cover if cover.startswith("//") else cover
 
 
 def _try_douban(name: str, timeout: int = 10) -> Optional[str]:
@@ -268,9 +308,40 @@ def _try_google_books(name: str, timeout: int = 10) -> Optional[str]:
 
 
 SOURCES = {
+    "dangdang": _try_dangdang,
     "douban": _try_douban,
     "google_books": _try_google_books,
 }
+
+
+def resolve_cover_override(value: str, vault: Optional[str],
+                           cache_dir: str, timeout: int = 10) -> Optional[str]:
+    """Resolve a manual `cover_url:` value to a local file path.
+
+    Accepts: http(s) URL (downloaded to cache), absolute path (used directly
+    if exists), or relative path (resolved against vault root).
+    """
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        os.makedirs(cache_dir, exist_ok=True)
+        h = hashlib.sha256(value.encode()).hexdigest()[:16]
+        path = os.path.join(cache_dir, f"override_{h}.jpg")
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            return path
+        data = _http_get(value, timeout)
+        if not data:
+            return None
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+    if os.path.isabs(value):
+        return value if os.path.exists(value) else None
+    if vault:
+        candidate = os.path.join(vault, value)
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 def _cache_path(name: str, cache_dir: str) -> str:
@@ -323,7 +394,8 @@ def insert_book_cover(content: str, cover_path: str) -> str:
 
 
 # ── Top-level coordinator ────────────────────────────────────
-def illustrate(content: str, title: str, cfg, tempdir: str, logger=None) -> dict:
+def illustrate(content: str, title: str, cfg, tempdir: str,
+               vault: Optional[str] = None, logger=None) -> dict:
     """Apply book_cover + quote_cards per cfg.illustrate.
 
     Returns {'content', 'book_cover', 'quote_cards', 'warnings'}. Never raises.
@@ -334,25 +406,39 @@ def illustrate(content: str, title: str, cfg, tempdir: str, logger=None) -> dict
     }
     ill_cfg = cfg.illustrate
 
-    # Book cover
+    # Book cover: 1) frontmatter `cover_url:` override → 2) auto-search by name
     if ill_cfg.book_cover.enabled:
-        book_name = extract_book_name(title, content)
-        if not book_name:
-            result["warnings"].append("book_cover: no book name detected")
-        else:
-            cache_dir = (ill_cfg.book_cover.cache_dir
-                         or os.path.join(tempdir, "wap_book_covers"))
+        meta = extract_book_meta(title, content)
+        cache_dir = (ill_cfg.book_cover.cache_dir
+                     or os.path.join(tempdir, "wap_book_covers"))
+        cover_path = None
+
+        if meta["cover_url"]:
+            cover_path = resolve_cover_override(
+                meta["cover_url"], vault, cache_dir,
+                timeout=ill_cfg.book_cover.timeout,
+            )
+            if cover_path and logger:
+                logger.info(f"book_cover[override]: {meta['cover_url']} -> {cover_path}")
+            elif logger:
+                logger.warning(f"book_cover[override]: failed to resolve {meta['cover_url']!r}")
+
+        if not cover_path and meta["name"]:
             cover_path = fetch_book_cover(
-                book_name, cache_dir,
+                meta["name"], cache_dir,
                 sources=tuple(ill_cfg.book_cover.sources),
                 timeout=ill_cfg.book_cover.timeout,
                 logger=logger,
             )
-            if cover_path:
-                result["content"] = insert_book_cover(result["content"], cover_path)
-                result["book_cover"] = cover_path
-            else:
-                result["warnings"].append(f"book_cover: not found for '{book_name}'")
+
+        if cover_path:
+            result["content"] = insert_book_cover(result["content"], cover_path)
+            result["book_cover"] = cover_path
+        elif not meta["name"] and not meta["cover_url"]:
+            result["warnings"].append("book_cover: no book name or cover_url detected")
+        else:
+            target = meta["cover_url"] or meta["name"]
+            result["warnings"].append(f"book_cover: not found for {target!r}")
 
     # Quote cards
     if ill_cfg.quote_cards.enabled:

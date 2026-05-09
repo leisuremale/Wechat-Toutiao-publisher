@@ -19,10 +19,31 @@ def main():
                    help="Open headed browser for first-time Toutiao QR-code login")
     p.add_argument("--check-toutiao", action="store_true",
                    help="Check whether the saved Toutiao session is still valid")
+    p.add_argument("--test-cover", metavar="BOOK_NAME",
+                   help="Diagnose: try fetching a book cover from each configured source")
     args = p.parse_args()
 
     cfg = load_config(args.config)
     logger = get_logger(cfg.log.dir, cfg.log.level)
+
+    if args.test_cover:
+        from .illustrate import SOURCES
+        results = []
+        for src_name in cfg.illustrate.book_cover.sources:
+            fn = SOURCES.get(src_name)
+            if not fn:
+                results.append({"source": src_name, "ok": False,
+                                "error": "unknown source"})
+                continue
+            try:
+                url = fn(args.test_cover, timeout=cfg.illustrate.book_cover.timeout)
+                results.append({"source": src_name, "ok": bool(url), "url": url})
+            except Exception as e:
+                results.append({"source": src_name, "ok": False,
+                                "error": f"{type(e).__name__}: {e}"})
+        report = {"book": args.test_cover, "results": results}
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if any(r.get("ok") for r in results) else 1
 
     if args.login_toutiao or args.check_toutiao:
         if not cfg.toutiao.user_data_dir:

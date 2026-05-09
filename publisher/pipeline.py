@@ -119,6 +119,7 @@ def run(cfg, logger):
             title=title,
             cfg=cfg,
             tempdir=tempfile.gettempdir(),
+            vault=cfg.obsidian_vault,
             logger=logger,
         )
         if ill["content"] != content:

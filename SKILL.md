@@ -4,7 +4,7 @@ description: |
   一键将 Obsidian Markdown 排版并发布到微信公众号草稿箱 + 头条号草稿。
   当用户要求「发到公众号」「推送草稿」「发布文章」「同步到头条」或类似意图时触发。
   6 步全自动管道：取文章 → 封面 → 预处理 → 配图（书封+金句卡）→ 微信草稿 → 头条草稿 → 归档。
-  正文自动插入 Douban 抓的书封 + markdown 引用块渲染的金句卡片。
+  正文自动插入书封（当当/豆瓣/Google Books 三级 fallback）+ markdown 引用块渲染的金句卡片。
   支持 cron 定时；网络失败自动重试；已发文章绝不重复推送（sidecar 续跑）。
 ---
 
@@ -143,3 +143,11 @@ python -m publisher --login-toutiao    # 首次扫码或重登（需图形终端
 ```
 
 模型不应在常规发布流程中调用这两个命令。仅当用户问「头条登录还在吗」或 `error` 含 `not logged in` 时建议用户手动跑。
+
+## 书封诊断（管理操作）
+
+```bash
+python -m publisher --test-cover "书名"   # 试每个源，输出哪个能用
+```
+
+仅当用户问「为什么这本书的封面没出来」或 `warnings` 含 `book_cover: not found` 时建议用户手动跑。诊断后用户可以根据结果改 `pipeline-config.json` 的 `illustrate.book_cover.sources` 顺序，或在 frontmatter 加 `cover_url:` 手动覆盖。

@@ -53,7 +53,7 @@ class RetryConfig:
 @dataclass
 class BookCoverConfig:
     enabled: bool = True
-    sources: list = field(default_factory=lambda: ["douban", "google_books"])
+    sources: list = field(default_factory=lambda: ["dangdang", "douban", "google_books"])
     cache_dir: Optional[str] = None
     timeout: int = 10
 

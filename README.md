@@ -66,14 +66,35 @@ python -m publisher
 
 文章不再只有封面，正文里也有视觉锚点：
 
-- **书封**：从 frontmatter `book:` 或标题 `《...》` 自动抽书名 → Douban / Google Books 抓封面 → 缓存 → 插到文章顶部。失败优雅降级
+- **书封**：从 frontmatter `book:` 或标题 `《...》` 自动抽书名 → 当当 / 豆瓣 / Google Books 抓封面 → 缓存 → 插到文章顶部
+- **手动覆盖**：frontmatter 加 `cover_url:` 即用指定图（URL / 绝对路径 / vault 相对路径），免去搜索失败
 - **金句卡**：扫 markdown 里的 `> 引用块`，每段渲染成 900x500 视觉卡片（Playwright + HTML/CSS 模板），插在引用之后保留可访问性。`max_per_article` 防止全是卡片劣化阅读节奏
 
 ```json
 "illustrate": {
-  "book_cover": { "enabled": true, "sources": ["douban", "google_books"] },
+  "book_cover": { "enabled": true, "sources": ["dangdang", "douban", "google_books"] },
   "quote_cards": { "enabled": true, "template": "classic", "max_per_article": 4 }
 }
+```
+
+豆瓣最近反爬严，**当当作为主源**更稳定。诊断哪个源能用：
+
+```bash
+python -m publisher --test-cover "百年孤独"
+# {"book": "百年孤独", "results": [
+#   {"source": "dangdang", "ok": true,  "url": "..."},
+#   {"source": "douban",   "ok": false, "url": null},
+#   ...
+# ]}
+```
+
+封面找不到时，frontmatter 写死 URL 兜底：
+
+```yaml
+---
+book: 百年孤独
+cover_url: https://img3m0.ddimg.cn/46/30/29819440-1_b_1762827510.jpg
+---
 ```
 
 模板存在 `themes/quotes/*.json`（`classic` / `dark` / `minimal`），加新模板不改代码。
@@ -244,7 +265,7 @@ python3 scripts/publish-pipeline.py
   "illustrate": {
     "book_cover": {
       "enabled": true,
-      "sources": ["douban", "google_books"],
+      "sources": ["dangdang", "douban", "google_books"],
       "cache_dir": null,
       "timeout": 10
     },
