@@ -253,7 +253,10 @@ def download_image(photo: dict, cache_dir: str, timeout: int = 15) -> Optional[s
 # ── Insertion + attribution ──────────────────────────────────
 def insert_images(content: str, image_paths: list, anchors: list) -> str:
     """Insert markdown image refs after each anchor line. Reverse-iter to
-    preserve indices."""
+    preserve indices.
+
+    image_paths are vault-relative (e.g. '7-存档区/attachment/wap-stock-abc123.jpg').
+    """
     if not image_paths or not anchors:
         return content
     pairs = list(zip(sorted(anchors[:len(image_paths)], reverse=True),
@@ -352,8 +355,14 @@ def fetch_topical_images(content: str, cfg, cache_dir: str,
     return result
 
 
-def add_stock_images(content: str, cfg, cache_dir: str, logger=None) -> dict:
-    """Top-level: fetch + insert + attribute. Returns {content, images, warnings}."""
+def add_stock_images(content: str, cfg, cache_dir: str,
+                    note_dir: str = "", vault: str = "",
+                    logger=None) -> dict:
+    """Top-level: fetch + insert + attribute. Returns {content, images, warnings}.
+
+    note_dir and vault are used to copy fetched images to the vault attachment
+    folder so Obsidian can display them (vault-relative paths in markdown).
+    """
     result = {"content": content, "images": [], "warnings": []}
 
     if not cfg.enabled:
@@ -365,17 +374,43 @@ def add_stock_images(content: str, cfg, cache_dir: str, logger=None) -> dict:
     if not fetched["images"]:
         return result
 
-    image_paths = [img["path"] for img in fetched["images"]]
-    anchors = pick_anchors(content, len(image_paths))
+    # Copy fetched images to vault attachment dir, collect Obsidian-relative paths
+    vault_rel_paths = []
+    abs_copy_paths = []
+    if vault and note_dir:
+        attachment_dir = os.path.join(vault, "7-存档区/attachment")
+        os.makedirs(attachment_dir, exist_ok=True)
+        for img in fetched["images"]:
+            src = img["path"]
+            if src and os.path.exists(src):
+                ext = os.path.splitext(src)[1] or ".jpg"
+                sha = hashlib.sha256(src.encode()).hexdigest()[:12]
+                filename = f"wap-stock-{sha}{ext}"
+                dest = os.path.join(attachment_dir, filename)
+                if not os.path.exists(dest):
+                    import shutil
+                    shutil.copy2(src, dest)
+                # Obsidian resolves relative paths from the note's directory
+                obsidian_rel = os.path.relpath(dest, note_dir)
+                vault_rel_paths.append(obsidian_rel)
+                abs_copy_paths.append(dest)
+            else:
+                vault_rel_paths.append(src)
+                abs_copy_paths.append(src)
+    else:
+        vault_rel_paths = [img["path"] for img in fetched["images"]]
+        abs_copy_paths = vault_rel_paths
+
+    anchors = pick_anchors(content, len(vault_rel_paths))
     if not anchors:
         result["warnings"].append("no insertion anchors (article too short or no sections)")
         return result
 
-    new_content = insert_images(content, image_paths, anchors)
+    new_content = insert_images(content, vault_rel_paths, anchors)
     if cfg.license_attribution:
         new_content += build_attribution(fetched["images"])
 
     result["content"] = new_content
-    result["images"] = image_paths
+    result["images"] = abs_copy_paths
     return result
 

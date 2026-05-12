@@ -18,6 +18,36 @@ import urllib.parse, urllib.request
 from html import escape
 from typing import Optional
 
+# ── Attachment helpers ──────────────────────────────────────────
+# Vault-relative path for cached images so Obsidian can display them.
+ATTACHMENT_SUBDIR = "7-存档区/attachment"
+
+
+def _copy_to_attachment(src_path: str, vault: str, prefix: str,
+                          note_dir: str = "") -> tuple:
+    """Copy src_path to vault/ATTACHMENT_SUBDIR/, return (obsidian_rel_path, abs_path).
+
+    Obsidian resolves relative paths from the note's own directory.
+    note_dir is used to compute the correct number of ../ segments.
+    """
+    if not src_path or not os.path.exists(src_path):
+        return "", src_path or ""
+    attachment_dir = os.path.join(vault, ATTACHMENT_SUBDIR)
+    os.makedirs(attachment_dir, exist_ok=True)
+    ext = os.path.splitext(src_path)[1] or ".jpg"
+    sha = hashlib.sha256(src_path.encode()).hexdigest()[:12]
+    filename = f"{prefix}-{sha}{ext}"
+    dest = os.path.join(attachment_dir, filename)
+    if not os.path.exists(dest):
+        import shutil
+        shutil.copy2(src_path, dest)
+    if note_dir:
+        obsidian_rel = os.path.relpath(dest, note_dir)
+    else:
+        obsidian_rel = f"{ATTACHMENT_SUBDIR}/{filename}"
+    return obsidian_rel, dest
+
+
 # ── Templates ────────────────────────────────────────────────
 BUNDLED_QUOTES_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "themes", "quotes")
@@ -472,7 +502,10 @@ def fetch_book_cover(book_name: str, cache_dir: str,
 
 
 def insert_book_cover(content: str, cover_path: str) -> str:
-    """Insert the cover as the first body line (after frontmatter, if any)."""
+    """Insert the cover as the first body line (after frontmatter, if any).
+
+    cover_path is vault-relative (e.g. '7-存档区/attachment/cover.jpg').
+    """
     m = FRONTMATTER_BLOCK_RE.match(content)
     if m:
         head = content[:m.end()]
@@ -483,9 +516,11 @@ def insert_book_cover(content: str, cover_path: str) -> str:
 
 # ── Top-level coordinator ────────────────────────────────────
 def illustrate(content: str, title: str, cfg, tempdir: str,
-               vault: Optional[str] = None, logger=None) -> dict:
+               vault: Optional[str] = None, article_path: Optional[str] = None,
+               logger=None) -> dict:
     """Apply book_cover + quote_cards per cfg.illustrate.
 
+    article_path is used to compute vault-relative paths for inserted images.
     Returns {'content', 'book_cover', 'quote_cards', 'warnings'}. Never raises.
     """
     result = {
@@ -493,6 +528,8 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
         "quote_cards": [], "stock_images": [], "warnings": [],
     }
     ill_cfg = cfg.illustrate
+
+    note_dir = os.path.dirname(os.path.abspath(article_path)) if article_path else ""
 
     # Book cover: 1) frontmatter `cover_url:` override → 2) auto-search by name
     if ill_cfg.book_cover.enabled:
@@ -519,7 +556,12 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
                 logger=logger,
             )
 
-        if cover_path:
+        if cover_path and vault:
+            # Copy from temp cache → vault attachment dir, use vault-relative path
+            rel_path, abs_copy = _copy_to_attachment(cover_path, vault, "wap-cover", note_dir)
+            result["content"] = insert_book_cover(result["content"], rel_path)
+            result["book_cover"] = abs_copy
+        elif cover_path:
             result["content"] = insert_book_cover(result["content"], cover_path)
             result["book_cover"] = cover_path
         elif not meta["name"] and not meta["cover_url"]:
@@ -551,7 +593,8 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
         cache_dir = (ill_cfg.stock_images.cache_dir
                      or os.path.join(tempdir, "wap_stock_images"))
         si_result = stockimg.add_stock_images(
-            result["content"], si_cfg, cache_dir, logger=logger,
+            result["content"], si_cfg, cache_dir,
+            note_dir=note_dir, vault=vault, logger=logger,
         )
         result["content"] = si_result["content"]
         result["stock_images"] = si_result["images"]

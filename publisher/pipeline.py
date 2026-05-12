@@ -10,7 +10,7 @@ import os, shutil, tempfile, traceback
 
 from .cover import render as render_cover
 from .illustrate import illustrate as illustrate_content
-from .preprocess import preprocess_article
+from .preprocess import preprocess_article, update_publish_status
 from .retry import retry, is_likely_transient
 from . import state as state_mod
 from .wenyan import resolve_bin, publish_wechat, render_toutiao
@@ -120,6 +120,7 @@ def run(cfg, logger):
             cfg=cfg,
             tempdir=tempfile.gettempdir(),
             vault=cfg.obsidian_vault,
+            article_path=article,
             logger=logger,
         )
         if ill["content"] != content:
@@ -226,6 +227,18 @@ def run(cfg, logger):
                     msg = f"toutiao auto-publish failed: {td.get('error')}"
                     result["warnings"].append(msg)
                     logger.warning(msg)
+
+        # Step 5b: update publish status in frontmatter before archiving
+        result["step"] = "update_frontmatter"
+        with open(staged, encoding="utf-8") as f:
+            staged_content = f.read()
+        updated_content, fm_changed = update_publish_status(staged_content)
+        if fm_changed:
+            with open(staged, "w", encoding="utf-8") as f:
+                f.write(updated_content)
+            logger.info("frontmatter updated: 微信未发→已发 / date_published added")
+        else:
+            logger.info("frontmatter: no 未发 tag or already complete")
 
         # Step 6: archive (state cleared on success)
         result["step"] = "archive"

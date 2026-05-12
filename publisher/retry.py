@@ -19,6 +19,8 @@ FATAL_PATTERNS = (
     "editor selector",
     "config:",               # our load_config() prefix
     "no module named",
+    "ENOENT",                # file not found — retrying won't fix a missing file
+    "no such file",          # same, human-readable variant
 )
 
 
