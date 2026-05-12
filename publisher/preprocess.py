@@ -1,7 +1,58 @@
 """Obsidian article preprocessing: image conversion + frontmatter normalization."""
-import os, re, sys
+import datetime, os, re, sys
 
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
+
+# Tags that indicate an article has NOT yet been published
+UNPUBLISHED_TAG_REPLACEMENTS = {
+    "微信未发": "微信已发",
+    "公众号未发": "公众号已发",
+}
+
+
+def _get_field_value(fm_text, field):
+    """Return the value string for a frontmatter field, or None if absent."""
+    m = re.search(rf"(?m)^{re.escape(field)}:\s*(.*)$", fm_text)
+    return m.group(1).strip() if m else None
+
+
+def update_publish_status(content):
+    """Replace '未发' tags with '已发' and add publish date if missing.
+
+    Handles both YAML list tags: [微信未发, 其他]
+    and inline string tags:  微信未发  other
+    Also adds date_published if not already set.
+    Returns (new_content, changed).
+    """
+    m = FRONTMATTER_RE.match(content)
+    if not m:
+        return content, False
+
+    fm = m.group(1)
+    body = content[m.end():]
+    changed = False
+
+    # 1. Replace 未发 → 已发 in tags field
+    tags_val = _get_field_value(fm, "tags")
+    if tags_val is not None:
+        new_tags = tags_val
+        for old, new in UNPUBLISHED_TAG_REPLACEMENTS.items():
+            if old in new_tags:
+                new_tags = new_tags.replace(old, new)
+                changed = True
+        if changed:
+            fm = re.sub(r"(?m)^tags:.*$", f"tags: {new_tags}", fm)
+
+    # 2. Add date_published if not present
+    if _get_field_value(fm, "date_published") is None:
+        today = datetime.date.today().isoformat()
+        fm = fm.rstrip() + f"\ndate_published: {today}"
+        changed = True
+
+    if not changed:
+        return content, False
+
+    return f"---\n{fm.strip()}\n---\n{body.lstrip()}", True
 
 
 def build_image_index(vault):
@@ -26,7 +77,7 @@ def convert_obsidian_images(content, note_dir, image_index, logger=None):
             return f"![{alt}]({local})"
 
         found = image_index.get(name)
-        if found:
+        if found and os.path.exists(found):
             return f"![{alt}]({found})"
 
         msg = f"image not found in vault: {name}"
