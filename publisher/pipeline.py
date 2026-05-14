@@ -113,29 +113,45 @@ def run(cfg, logger):
         )
 
         # Step 3b: illustrate — book cover (top) + quote cards (inline)
-        result["step"] = "illustrate"
-        ill = illustrate_content(
-            content=content,
-            title=title,
-            cfg=cfg,
-            tempdir=tempfile.gettempdir(),
-            vault=cfg.obsidian_vault,
-            article_path=article,
-            logger=logger,
-        )
-        if ill["content"] != content:
-            with open(staged, "w", encoding="utf-8") as f:
-                f.write(ill["content"])
-        result["book_cover"] = ill["book_cover"]
-        result["quote_cards"] = ill["quote_cards"]
-        result["stock_images"] = ill.get("stock_images", [])
-        for w in ill["warnings"]:
-            result["warnings"].append(f"illustrate: {w}")
-        if ill["book_cover"] or ill["quote_cards"]:
-            logger.info(
-                f"illustrate: book_cover={'yes' if ill['book_cover'] else 'no'}, "
-                f"quote_cards={len(ill['quote_cards'])}"
+        # On resume with WeChat already published, restore the snapshot
+        # of the processed content so images match what was actually uploaded.
+        snapshot_path = staged + ".snapshot"
+        if prior.get("wechat_published") and os.path.exists(snapshot_path):
+            result["step"] = "illustrate"
+            shutil.copy2(snapshot_path, staged)
+            image_path_map = prior.get("image_path_map") or {}
+            logger.info("illustrate: restored from snapshot (resume)")
+        elif prior.get("wechat_published"):
+            # Snapshot lost — regenerating may produce different images than WeChat
+            logger.warning("illustrate: snapshot missing on resume; images may differ from WeChat")
+            # fall through to normal illustrate
+        if not (prior.get("wechat_published") and os.path.exists(snapshot_path)):
+            result["step"] = "illustrate"
+            ill = illustrate_content(
+                content=content,
+                title=title,
+                cfg=cfg,
+                tempdir=tempfile.gettempdir(),
+                vault=cfg.obsidian_vault,
+                article_path=article,
+                logger=logger,
             )
+            if ill["content"] != content:
+                with open(staged, "w", encoding="utf-8") as f:
+                    f.write(ill["content"])
+            result["book_cover"] = ill["book_cover"]
+            result["quote_cards"] = ill["quote_cards"]
+            result["stock_images"] = ill.get("stock_images", [])
+            image_path_map = ill.get("path_map", {})
+            for w in ill["warnings"]:
+                result["warnings"].append(f"illustrate: {w}")
+            if ill["book_cover"] or ill["quote_cards"]:
+                logger.info(
+                    f"illustrate: book_cover={'yes' if ill['book_cover'] else 'no'}, "
+                    f"quote_cards={len(ill['quote_cards'])}"
+                )
+            # Save snapshot for potential resume
+            shutil.copy2(staged, snapshot_path)
 
         # Step 4: WeChat publish — skip if state says already done
         result["step"] = "publish_wechat"
@@ -162,6 +178,7 @@ def run(cfg, logger):
             state_mod.save(article, {
                 "wechat_published": True,
                 "wechat_media_id": pub["media_id"],
+                "image_path_map": image_path_map,
             })
             logger.info(f"published media_id={pub['media_id']}")
 
@@ -228,7 +245,22 @@ def run(cfg, logger):
                     result["warnings"].append(msg)
                     logger.warning(msg)
 
-        # Step 5b: update publish status in frontmatter before archiving
+        # Step 5b: rewrite image paths from /tmp → vault-relative for Obsidian
+        if image_path_map:
+            result["step"] = "rewrite_image_paths"
+            with open(staged, encoding="utf-8") as f:
+                staged_content = f.read()
+            replaced = 0
+            for tmp_path, vault_rel in image_path_map.items():
+                if tmp_path in staged_content:
+                    staged_content = staged_content.replace(tmp_path, vault_rel)
+                    replaced += 1
+            if replaced:
+                with open(staged, "w", encoding="utf-8") as f:
+                    f.write(staged_content)
+                logger.info(f"image_paths: {replaced} rewritten for Obsidian")
+
+        # Step 5c: update publish status in frontmatter before archiving
         result["step"] = "update_frontmatter"
         with open(staged, encoding="utf-8") as f:
             staged_content = f.read()
@@ -246,6 +278,10 @@ def run(cfg, logger):
         dest = os.path.join(cfg.published_full, os.path.basename(article))
         shutil.move(staged, dest)
         staged = None
+        # Clean up snapshot
+        snapshot_path = os.path.join(staged_dir, os.path.basename(article)) + ".snapshot"
+        if os.path.exists(snapshot_path):
+            os.remove(snapshot_path)
         os.remove(article)
         state_mod.clear(article)
         logger.info(f"archived: {dest}")

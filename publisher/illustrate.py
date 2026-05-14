@@ -525,7 +525,8 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
     """
     result = {
         "content": content, "book_cover": None,
-        "quote_cards": [], "stock_images": [], "warnings": [],
+        "quote_cards": [], "stock_images": [],
+        "path_map": {}, "warnings": [],
     }
     ill_cfg = cfg.illustrate
 
@@ -557,10 +558,18 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
             )
 
         if cover_path and vault:
-            # Copy from temp cache → vault attachment dir, use vault-relative path
+            # Copy to vault for Obsidian, then also copy to tempdir for wenyan
+            # (vault path contains spaces → wenyan URL-encodes them → stat fails)
             rel_path, abs_copy = _copy_to_attachment(cover_path, vault, "wap-cover", note_dir)
-            result["content"] = insert_book_cover(result["content"], rel_path)
+            safe_ext = os.path.splitext(cover_path)[1] or ".jpg"
+            safe_cover = os.path.join(tempdir, "wap_cover_img" + safe_ext)
+            import shutil
+            shutil.copy2(cover_path, safe_cover)
+            result["content"] = insert_book_cover(result["content"], safe_cover)
             result["book_cover"] = abs_copy
+            # Record mapping: safe_cover (in markdown) → vault-relative (for Obsidian)
+            if rel_path:
+                result["path_map"][safe_cover] = rel_path
         elif cover_path:
             result["content"] = insert_book_cover(result["content"], cover_path)
             result["book_cover"] = cover_path
@@ -598,6 +607,7 @@ def illustrate(content: str, title: str, cfg, tempdir: str,
         )
         result["content"] = si_result["content"]
         result["stock_images"] = si_result["images"]
+        result["path_map"].update(si_result.get("path_map", {}))
         for w in si_result["warnings"]:
             result["warnings"].append(f"stock_images: {w}")
         if logger and si_result["images"]:

@@ -6,21 +6,33 @@ FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 # Tags that indicate an article has NOT yet been published
 UNPUBLISHED_TAG_REPLACEMENTS = {
     "微信未发": "微信已发",
+    "微信待发": "微信已发",
     "公众号未发": "公众号已发",
 }
 
+# Matches tags in three formats:
+# 1. YAML list:  tags:\n  - tag1\n  - tag2
+# 2. YAML flow:  tags: [tag1, tag2]
+# 3. Inline:     tags: tag1 tag2
+TAGS_BLOCK_RE = re.compile(
+    r"(?m)^tags:\s*((?:\n[ \t]+-\s+.+)+|\[[^\]]+\]|.*?)\s*$"
+)
 
-def _get_field_value(fm_text, field):
-    """Return the value string for a frontmatter field, or None if absent."""
-    m = re.search(rf"(?m)^{re.escape(field)}:\s*(.*)$", fm_text)
-    return m.group(1).strip() if m else None
+
+def _get_field_value(fm, field):
+    """Read a scalar field value from YAML frontmatter string.
+    Supports `field: value`, `field: "value"`, and single-line flow."""
+    pattern = re.compile(rf"(?m)^{field}:\s*(\S.*?)\s*$")
+    m = pattern.search(fm)
+    if m:
+        return m.group(1).strip().strip('"\'')
+    return None
 
 
 def update_publish_status(content):
     """Replace '未发' tags with '已发' and add publish date if missing.
 
-    Handles both YAML list tags: [微信未发, 其他]
-    and inline string tags:  微信未发  other
+    Handles YAML list, flow, and inline tag formats.
     Also adds date_published if not already set.
     Returns (new_content, changed).
     """
@@ -33,15 +45,16 @@ def update_publish_status(content):
     changed = False
 
     # 1. Replace 未发 → 已发 in tags field
-    tags_val = _get_field_value(fm, "tags")
-    if tags_val is not None:
-        new_tags = tags_val
+    tm = TAGS_BLOCK_RE.search(fm)
+    if tm:
+        tags_block = tm.group(0)
+        new_block = tags_block
         for old, new in UNPUBLISHED_TAG_REPLACEMENTS.items():
-            if old in new_tags:
-                new_tags = new_tags.replace(old, new)
+            if old in new_block:
+                new_block = new_block.replace(old, new)
                 changed = True
         if changed:
-            fm = re.sub(r"(?m)^tags:.*$", f"tags: {new_tags}", fm)
+            fm = fm.replace(tags_block, new_block)
 
     # 2. Add date_published if not present
     if _get_field_value(fm, "date_published") is None:
