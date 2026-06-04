@@ -367,6 +367,15 @@ def add_stock_images(content: str, cfg, cache_dir: str,
     if not cfg.enabled:
         return result
 
+    # Skip stock image insertion if the article already has embedded images
+    # (e.g. from Obsidian ![[...]] syntax). The author chose specific images —
+    # don't dilute them with generic stock photos.
+    existing_images = re.findall(r'!\[.*?\]\([^)]+\)', content)
+    if existing_images:
+        if logger:
+            logger.info(f"stock_images: skipped ({len(existing_images)} existing images in article)")
+        return result
+
     fetched = fetch_topical_images(content, cfg, cache_dir, logger)
     result["warnings"].extend(fetched["warnings"])
 
