@@ -109,11 +109,26 @@ $EDITOR pipeline-config.json
 
 详细字段说明见 [README.md](./README.md) 「配置参考」章节。
 
-## 主题与封面模板
+## 封面
 
-排版主题（`wechat.theme_css`，传给 wenyan）：自定义 `themes/mo-ping.css`，或用 wenyan 内置的 `default / orangeheart / rainbow / lapis / pie / maize / purple / phycat`。
+### Codex AI 封面（推荐，`cover.use_codex: true`）
 
-封面模板（`cover.template`，存在 `themes/covers/*.json`）：
+Codex `image_gen` 生成背景图 + Pillow 叠加文字。每篇文章独有封面。已缓存（按标题哈希），重新生成不重复调用。
+
+| 元素 | 字体 | 字号 | 说明 |
+|------|------|------|------|
+| 《书名》行 | Songti 宋体 | 48px | 经典衬线，文学感 |
+| 副标题行 | Songti 宋体 | 26px | 按逗号拆分行 |
+| "乐之读" | STHeiti Light | 20px | 细黑体，与标题区分 |
+| 无《》书名时 | — | 32px | 整段标题按逗号拆多行居中 |
+
+**设计原则**：
+- 标题字体 = 宋体（serif，有特点），副标题 = 细黑体（sans-serif，区分开）
+- 行间距比默认宽松（book_line_h=64, tagline=38, gap=24~28）
+- 背景图：4 种风格随机（水墨/文学/抽象），按书名哈希选，同书名同风格
+- 安全区域：中央 500×500 独立成图（微信转发卡片裁切用）
+
+### Playwright 封面（fallback，`cover.use_codex: false`）
 
 | ID | 风格 |
 |----|------|
@@ -122,7 +137,9 @@ $EDITOR pipeline-config.json
 | `fresh` | 浅绿 + 细线 |
 | `bold` | 纯白 + 橙色边框 |
 
-加新模板：往 `themes/covers/<name>.json` 写一份，不用改代码。
+## 主题
+
+排版主题（`wechat.theme_css`，传给 wenyan）：自定义 `themes/mo-ping.css`，或用 wenyan 内置的 `default / orangeheart / rainbow / lapis / pie / maize / purple / phycat`。
 
 ## 插图
 
